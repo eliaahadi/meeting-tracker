@@ -4,7 +4,7 @@ os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1'
 from flask import Flask, request, jsonify, send_from_directory, redirect
 from flask_sqlalchemy import SQLAlchemy
 from flask_cors import CORS
-from datetime import datetime
+from datetime import datetime, timedelta
 import datetime as dt
 import google.auth.transport.requests
 from google.oauth2.credentials import Credentials
@@ -80,6 +80,54 @@ def get_meetings():
         }
     })
 
+@app.route('/api/meetings/filter')
+def get_filtered_meetings():
+    timeframe = request.args.get('range', 'all')
+    today = datetime.now().date()
+
+    if timeframe == 'week':
+        start_date = today - timedelta(days=today.weekday())  # Monday of this week
+    elif timeframe == 'month':
+        start_date = today.replace(day=1)  # 1st of this month
+    elif timeframe == 'last7':
+        start_date = today - timedelta(days=6)  # last 7 days including today
+    else:
+        start_date = None
+
+    query = Meeting.query
+    if start_date:
+        query = query.filter(Meeting.date >= start_date)
+
+    meetings = query.order_by(Meeting.date.desc(), Meeting.start_time.desc()).all()
+
+    result = []
+    total_duration = 0
+    for m in meetings:
+        start = datetime.combine(m.date, m.start_time)
+        end = datetime.combine(m.date, m.end_time)
+        duration = (end - start).seconds // 60
+        total_duration += duration
+        result.append({
+            'title': m.title,
+            'description': m.description,
+            'date': m.date.strftime('%Y-%m-%d'),
+            'start_time': m.start_time.strftime('%H:%M'),
+            'end_time': m.end_time.strftime('%H:%M'),
+            'attendees': m.attendees,
+            'calendar_name': m.calendar_name,
+            'duration_min': duration
+        })
+
+    return jsonify({
+        'meetings': result,
+        'summary': {
+            'count': len(meetings),
+            'total_duration': total_duration,
+            'average_duration': total_duration // len(meetings) if meetings else 0
+        }
+    })
+
+
 @app.route('/authorize')
 def authorize():
     flow = Flow.from_client_secrets_file(
@@ -116,7 +164,7 @@ def sync_calendar():
     creds = Credentials.from_authorized_user_file(TOKEN_FILE, SCOPES)
     service = build('calendar', 'v3', credentials=creds)
 
-    now = dt.datetime.utcnow().isoformat() + 'Z'
+    now = dt.datetime.now().isoformat() + 'Z'
     events_result = service.events().list(
         calendarId='primary',
         timeMin=now,

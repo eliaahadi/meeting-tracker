@@ -1,24 +1,20 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Meeting Tracker</title>
-  <style>
-    body { font-family: Arial, sans-serif; margin: 20px; }
-    table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-    th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
-    th { background-color: #f4f4f4; }
-    .summary { background: #eef; padding: 10px; border-radius: 8px; margin-bottom: 20px; }
-  </style>
-</head>
 <body>
   <h1>Weekly Meeting Tracker</h1>
+
   <div class="summary">
+    <button onclick="syncNow()">🔄 Sync Now</button>
+    <label for="range">View:</label>
+    <select id="range">
+      <option value="all">All time</option>
+      <option value="last7" selected>Last 7 days</option>
+      <option value="week">This week</option>
+      <option value="month">This month</option>
+    </select>
     <p><strong>Total meetings:</strong> <span id="total-meetings">...</span></p>
     <p><strong>Total time spent:</strong> <span id="total-duration">...</span> minutes</p>
     <p><strong>Average duration:</strong> <span id="avg-duration">...</span> minutes</p>
   </div>
+
   <table>
     <thead>
       <tr>
@@ -34,11 +30,17 @@
     <tbody id="meeting-table"></tbody>
   </table>
 
-  <script>
-    fetch('/api/meetings')
+ 
+ <script>
+  function loadMeetings() {
+    const range = document.getElementById('range').value;
+
+    fetch(`/api/meetings/filter?range=${range}&t=${Date.now()}`)
       .then(response => response.json())
       .then(data => {
         const tbody = document.getElementById('meeting-table');
+        tbody.innerHTML = '';
+
         const summary = data.summary;
         document.getElementById('total-meetings').textContent = summary.count;
         document.getElementById('total-duration').textContent = summary.total_duration;
@@ -56,7 +58,23 @@
           </tr>`;
           tbody.insertAdjacentHTML('beforeend', row);
         });
+      })
+      .catch(err => {
+        console.error('Failed to load meetings:', err);
+        alert('Error loading meetings.');
       });
-  </script>
+  }
+
+  function syncNow() {
+    fetch('/sync-calendar')
+      .then(() => loadMeetings())
+      .catch(err => alert("Sync failed. Make sure you're authorized."));
+  }
+
+  // Ensure both dropdown and page load call it correctly
+  window.addEventListener('DOMContentLoaded', () => {
+    document.getElementById('range').addEventListener('change', loadMeetings);
+    loadMeetings(); // initial call
+  });
+</script>
 </body>
-</html>
