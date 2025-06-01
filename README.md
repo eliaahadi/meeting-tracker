@@ -65,7 +65,7 @@ You should now see meetings populate in the dashboard!
 
 🧪 Development Notes
 	•	DB path is explicitly set in app.py to avoid issues with multiple instances
-	•	meetings.db is stored in a fixed location (/Users/eliaahadi/meeting_tracker_data/)
+	•	meetings.db is stored in a fixed location 
 	•	Dates are handled as datetime.date for consistent filtering
 
 ⸻
