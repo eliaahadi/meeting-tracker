@@ -1,0 +1,9 @@
+services:
+  - type: web
+    name: meeting-tracker
+    env: python
+    buildCommand: ""
+    startCommand: "python app.py"
+    envVars:
+      - key: OAUTHLIB_INSECURE_TRANSPORT
+        value: "1"

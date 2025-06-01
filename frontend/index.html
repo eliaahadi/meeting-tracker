@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Meeting Tracker</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 20px; }
+    table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+    th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
+    th { background-color: #f4f4f4; }
+    .summary { background: #eef; padding: 10px; border-radius: 8px; margin-bottom: 20px; }
+  </style>
+</head>
+<body>
+  <h1>Weekly Meeting Tracker</h1>
+  <div class="summary">
+    <p><strong>Total meetings:</strong> <span id="total-meetings">...</span></p>
+    <p><strong>Total time spent:</strong> <span id="total-duration">...</span> minutes</p>
+    <p><strong>Average duration:</strong> <span id="avg-duration">...</span> minutes</p>
+  </div>
+  <table>
+    <thead>
+      <tr>
+        <th>Date</th>
+        <th>Title</th>
+        <th>Start</th>
+        <th>End</th>
+        <th>Duration (min)</th>
+        <th>Attendees</th>
+        <th>Calendar</th>
+      </tr>
+    </thead>
+    <tbody id="meeting-table"></tbody>
+  </table>
+
+  <script>
+    fetch('/api/meetings')
+      .then(response => response.json())
+      .then(data => {
+        const tbody = document.getElementById('meeting-table');
+        const summary = data.summary;
+        document.getElementById('total-meetings').textContent = summary.count;
+        document.getElementById('total-duration').textContent = summary.total_duration;
+        document.getElementById('avg-duration').textContent = summary.average_duration;
+
+        data.meetings.forEach(m => {
+          const row = `<tr>
+            <td>${m.date}</td>
+            <td>${m.title}</td>
+            <td>${m.start_time}</td>
+            <td>${m.end_time}</td>
+            <td>${m.duration_min}</td>
+            <td>${m.attendees}</td>
+            <td>${m.calendar_name}</td>
+          </tr>`;
+          tbody.insertAdjacentHTML('beforeend', row);
+        });
+      });
+  </script>
+</body>
+</html>
