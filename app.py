@@ -24,20 +24,23 @@ GOOGLE_CREDENTIALS_FILE = "credentials.json"
 TOKEN_FILE = "token.json"
 SCOPES = ["https://www.googleapis.com/auth/calendar.readonly"]
 
-# ── Meeting model ──
+# ── Inside app.py, update Meeting model ──
+
 class Meeting(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    title = db.Column(db.String(200))
+    id          = db.Column(db.Integer, primary_key=True)
+    event_id    = db.Column(db.String(200), unique=True, nullable=False)  # new
+    title       = db.Column(db.String(200))
     description = db.Column(db.Text)
-    date = db.Column(db.Date)
-    start_time = db.Column(db.Time)
-    end_time = db.Column(db.Time)
-    attendees = db.Column(db.Text)
+    date        = db.Column(db.Date)
+    start_time  = db.Column(db.Time)
+    end_time    = db.Column(db.Time)
+    attendees   = db.Column(db.Text)
     calendar_name = db.Column(db.String(100))
 
     def to_dict(self):
         return {
             "id": self.id,
+            "event_id": self.event_id,
             "title": self.title,
             "description": self.description,
             "date": self.date.isoformat() if self.date else None,
@@ -156,48 +159,108 @@ def sync_calendar():
     creds = Credentials.from_authorized_user_file(TOKEN_FILE, SCOPES)
     service = build('calendar', 'v3', credentials=creds)
 
-    # Sync past 30d → next 30d
-    time_min = (datetime.utcnow() - timedelta(days=30)).isoformat() + 'Z'
-    time_max = (datetime.utcnow() + timedelta(days=30)).isoformat() + 'Z'
+    # Fetch events from past 30 days to next 30 days
+    now = datetime.utcnow()
+    time_min = (now - timedelta(days=30)).isoformat() + 'Z'
+    time_max = (now + timedelta(days=30)).isoformat() + 'Z'
+
     events_result = service.events().list(
         calendarId='primary',
         timeMin=time_min,
         timeMax=time_max,
-        maxResults=100,
+        maxResults=250,
         singleEvents=True,
         orderBy='startTime'
     ).execute()
 
     events = events_result.get('items', [])
-    count  = 0
+    fetched_ids = set()
+
     for event in events:
-        start = event['start'].get('dateTime', event['start'].get('date'))
-        end   = event['end'].get('dateTime', event['end'].get('date'))
+        # 1) Make sure we have an event ID
+        eid = event.get('id')
+        if not eid:
+            print("⚠️ Skipping event with no ID:", event.get('summary', '(no title)'))
+            continue
+        fetched_ids.add(eid)
 
-        parsed_start = datetime.fromisoformat(start)
-        parsed_end   = datetime.fromisoformat(end)
+        # 2) Parse start/end
+        raw_start = event['start'].get('dateTime', event['start'].get('date'))
+        raw_end   = event['end'].get('dateTime', event['end'].get('date'))
+        try:
+            start_dt = datetime.fromisoformat(raw_start)
+            end_dt   = datetime.fromisoformat(raw_end)
+        except Exception as parse_err:
+            print("⚠️ Unable to parse dates:", raw_start, raw_end, parse_err)
+            continue
 
-        new_meeting=Meeting(
-            title=event.get('summary','No Title'),
-            description=event.get('description',''),
-            date=parsed_start.date(),
-            start_time=parsed_start.time(),
-            end_time=parsed_end.time(),
-            attendees=', '.join([att.get('email') for att in event.get('attendees',[])]) if 'attendees' in event else '',
-            calendar_name='primary'
-        )
+        # 3) Build the fields
+        meeting_date  = start_dt.date()
+        meeting_title = event.get('summary', 'No Title') or 'No Title'
+        meeting_desc  = event.get('description', '') or ''
+        attendees_list = []
+        for att in event.get('attendees', []):
+            email = att.get('email')
+            if email:
+                attendees_list.append(email)
+        meeting_attendees = ', '.join(attendees_list)
+        cal_name = 'primary'
 
-        exists = Meeting.query.filter_by(
-            title=new_meeting.title,
-            date=new_meeting.date,
-            start_time=new_meeting.start_time
-        ).first()
-        if not exists:
+        # 4) Upsert logic
+        existing = Meeting.query.filter_by(event_id=eid).first()
+        if existing:
+            # Update only if something changed
+            changed = False
+            if existing.title != meeting_title:
+                existing.title = meeting_title
+                changed = True
+            if existing.description != meeting_desc:
+                existing.description = meeting_desc
+                changed = True
+            if existing.date != meeting_date:
+                existing.date = meeting_date
+                changed = True
+            if existing.start_time != start_dt.time():
+                existing.start_time = start_dt.time()
+                changed = True
+            if existing.end_time != end_dt.time():
+                existing.end_time = end_dt.time()
+                changed = True
+            if existing.attendees != meeting_attendees:
+                existing.attendees = meeting_attendees
+                changed = True
+            if existing.calendar_name != cal_name:
+                existing.calendar_name = cal_name
+                changed = True
+
+            if changed:
+                db.session.add(existing)
+                print(f"🔄 Updated event {eid} ({meeting_title})")
+        else:
+            # Insert new row
+            new_meeting = Meeting(
+                event_id=eid,
+                title=meeting_title,
+                description=meeting_desc,
+                date=meeting_date,
+                start_time=start_dt.time(),
+                end_time=end_dt.time(),
+                attendees=meeting_attendees,
+                calendar_name=cal_name
+            )
             db.session.add(new_meeting)
-            count += 1
+            print(f"➕ Added event {eid} ({meeting_title})")
+
+    # 5) Delete any local rows whose event_id is no longer in Google’s results
+    if fetched_ids:
+        deleted = Meeting.query.filter(Meeting.event_id.notin_(list(fetched_ids))).delete(
+            synchronize_session=False
+        )
+        if deleted:
+            print(f"🗑️  Deleted {deleted} orphaned meeting(s)")
 
     db.session.commit()
-    return f'{count} events synced.'
+    return f'{len(fetched_ids)} events synced (addition/update), purged orphans.'
 
 
 @app.route('/')
@@ -208,5 +271,6 @@ def serve_frontend(path="index.html"):
 
 if __name__ == "__main__":
     with app.app_context():
+        db.drop_all() 
         db.create_all()
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
