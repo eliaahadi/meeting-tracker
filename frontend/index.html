@@ -1,80 +1,104 @@
 <body>
-  <h1>Weekly Meeting Tracker</h1>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Meeting Tracker</title>
+  <style>
+    body { font-family: sans-serif; margin: 2rem; }
+    button { margin: 0.25rem; padding: 0.5rem 1rem; }
+    #meeting-list { margin-top: 1rem; }
+    .meeting { margin-bottom: 0.5rem; padding: 0.5rem; border: 1px solid #ccc; border-radius: 5px; }
+  </style>
+</head>
+<body>
+  <h1>📅 Meeting Tracker</h1>
 
-  <div class="summary">
-    <button onclick="syncNow()">🔄 Sync Now</button>
-    <label for="range">View:</label>
-    <select id="range">
-      <option value="all">All time</option>
-      <option value="last7" selected>Last 7 days</option>
-      <option value="week">This week</option>
-      <option value="month">This month</option>
-    </select>
-    <p><strong>Total meetings:</strong> <span id="total-meetings">...</span></p>
-    <p><strong>Total time spent:</strong> <span id="total-duration">...</span> minutes</p>
-    <p><strong>Average duration:</strong> <span id="avg-duration">...</span> minutes</p>
+  <div>
+    <strong>Filter:</strong>
+    <button onclick="fetchAndRenderMeetings('all')">All</button>
+    <button onclick="fetchAndRenderMeetings('last7')">Last 7 Days</button>
+    <button onclick="fetchAndRenderMeetings('week')">This Week</button>
+    <button onclick="fetchAndRenderMeetings('month')">This Month</button>
   </div>
 
-  <table>
-    <thead>
-      <tr>
-        <th>Date</th>
-        <th>Title</th>
-        <th>Start</th>
-        <th>End</th>
-        <th>Duration (min)</th>
-        <th>Attendees</th>
-        <th>Calendar</th>
-      </tr>
-    </thead>
-    <tbody id="meeting-table"></tbody>
-  </table>
+  <h2>Total Meetings: <span id="meeting-count">0</span></h2>
+  <div id="meeting-list"></div>
 
  
- <script>
-  function loadMeetings() {
-    const range = document.getElementById('range').value;
+<script>
+  // function loadMeetings() {
+  //   const range = document.getElementById('range').value;
 
-    fetch(`/api/meetings/filter?range=${range}&t=${Date.now()}`)
-      .then(response => response.json())
-      .then(data => {
-        const tbody = document.getElementById('meeting-table');
-        tbody.innerHTML = '';
+  //   fetch(`/api/meetings/filter?range=${range}&t=${Date.now()}`)
+  //     .then(res => res.json())
+  //     .then(data => {
+  //       console.log('\n Filtered meetings:', data);
+  //       const tbody = document.getElementById('meeting-table');
+  //       tbody.innerHTML = '';
 
-        const summary = data.summary;
-        document.getElementById('total-meetings').textContent = summary.count;
-        document.getElementById('total-duration').textContent = summary.total_duration;
-        document.getElementById('avg-duration').textContent = summary.average_duration;
+  //       const summary = data.summary;
+  //       document.getElementById('total-meetings').textContent = summary.count;
+  //       document.getElementById('total-duration').textContent = summary.total_duration;
+  //       document.getElementById('avg-duration').textContent = summary.average_duration;
 
-        data.meetings.forEach(m => {
-          const row = `<tr>
-            <td>${m.date}</td>
-            <td>${m.title}</td>
-            <td>${m.start_time}</td>
-            <td>${m.end_time}</td>
-            <td>${m.duration_min}</td>
-            <td>${m.attendees}</td>
-            <td>${m.calendar_name}</td>
-          </tr>`;
-          tbody.insertAdjacentHTML('beforeend', row);
-        });
-      })
-      .catch(err => {
-        console.error('Failed to load meetings:', err);
-        alert('Error loading meetings.');
+  //       data.meetings.forEach(m => {
+  //         const row = `<tr>
+  //           <td>${m.date}</td>
+  //           <td>${m.title}</td>
+  //           <td>${m.start_time}</td>
+  //           <td>${m.end_time}</td>
+  //           <td>${m.duration_min}</td>
+  //           <td>${m.attendees}</td>
+  //           <td>${m.calendar_name}</td>
+  //         </tr>`;
+  //         tbody.insertAdjacentHTML('beforeend', row);
+  //         console.log('\n \n meetings loaded \n \n')
+  //       });
+  //     })
+  //     .catch(err => {
+  //       console.error("❌ Load failed", err);
+  //     });
+  // }
+
+  // document.addEventListener('DOMContentLoaded', () => {
+  //   document.getElementById('range').addEventListener('change', loadMeetings);
+  //   loadMeetings();
+  // });
+
+      async function fetchAndRenderMeetings(range = 'all') {
+      try {
+        const res = await fetch(`/api/meetings/filter?range=${range}&t=${Date.now()}`);
+        const data = await res.json();
+        console.log(`🎯 Filter = ${range}`, data);
+        renderMeetings(data);
+      } catch (err) {
+        console.error('Error fetching meetings:', err);
+      }
+    }
+
+    function renderMeetings(meetings) {
+      const list = document.getElementById('meeting-list');
+      const count = document.getElementById('meeting-count');
+
+      list.innerHTML = ''; // Clear old items
+      count.textContent = meetings.length;
+
+      meetings.forEach(meeting => {
+        const div = document.createElement('div');
+        div.className = 'meeting';
+        div.innerHTML = `
+          <strong>${meeting.title || 'Untitled'}</strong><br/>
+          📅 ${meeting.date} 🕒 ${meeting.start_time || ''} - ${meeting.end_time || ''}<br/>
+          👥 ${meeting.attendees || ''}
+        `;
+        list.appendChild(div);
       });
-  }
+    }
 
-  function syncNow() {
-    fetch('/sync-calendar')
-      .then(() => loadMeetings())
-      .catch(err => alert("Sync failed. Make sure you're authorized."));
-  }
-
-  // Ensure both dropdown and page load call it correctly
-  window.addEventListener('DOMContentLoaded', () => {
-    document.getElementById('range').addEventListener('change', loadMeetings);
-    loadMeetings(); // initial call
-  });
+    // Load all on page load
+    fetchAndRenderMeetings();
+  </script>
 </script>
 </body>
