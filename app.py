@@ -1,16 +1,16 @@
-import os
-os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1'
+# import os
+# os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1'
 
-from flask import Flask, request, jsonify, send_from_directory, redirect
-from flask_sqlalchemy import SQLAlchemy
-from flask_cors import CORS
-from datetime import datetime, timedelta, date
-from sqlalchemy import cast, Date
-import datetime as dt
-import google.auth.transport.requests
-from google.oauth2.credentials import Credentials
-from google_auth_oauthlib.flow import Flow
-from googleapiclient.discovery import build
+# from flask import Flask, request, jsonify, send_from_directory, redirect
+# from flask_sqlalchemy import SQLAlchemy
+# from flask_cors import CORS
+# from datetime import datetime, timedelta, date
+# from sqlalchemy import cast, Date
+# import datetime as dt
+# import google.auth.transport.requests
+# from google.oauth2.credentials import Credentials
+# from google_auth_oauthlib.flow import Flow
+# from googleapiclient.discovery import build
 
 # app = Flask(__name__, static_folder='static', static_url_path='')
 # basedir = os.path.abspath(os.path.dirname(__file__))
@@ -19,32 +19,84 @@ from googleapiclient.discovery import build
 # app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 # ✅ Absolute path to keep DB consistent
-BASE_DIR = '/Users/eliaahadi/Library/CloudStorage/GoogleDrive-elia.ahadi@gmail.com/My Drive/Personal/Coding/meeting_tracker'
-DB_PATH = os.path.join(BASE_DIR, 'meetings.db')
+# BASE_DIR = '/Users/eliaahadi/Library/CloudStorage/GoogleDrive-elia.ahadi@gmail.com/My Drive/Personal/Coding/meeting_tracker'
+# DB_PATH = os.path.join(BASE_DIR, 'meetings.db')
 
-# Make sure the directory exists
-os.makedirs(BASE_DIR, exist_ok=True)
+# # Make sure the directory exists
+# os.makedirs(BASE_DIR, exist_ok=True)
 
-app = Flask(__name__, static_folder='static')
+# app = Flask(__name__, static_folder='static')
+# CORS(app)
+
+# app.config['SQLALCHEMY_DATABASE_URI'] = f'sqlite:///{DB_PATH}'
+# app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+# db = SQLAlchemy(app)
+
+# GOOGLE_CREDENTIALS_FILE = 'credentials.json'
+# SCOPES = ['https://www.googleapis.com/auth/calendar.readonly']
+# TOKEN_FILE = 'token.json'
+
+# class Meeting(db.Model):
+#     id = db.Column(db.Integer, primary_key=True)
+#     title = db.Column(db.String(255))
+#     description = db.Column(db.Text)
+#     date = db.Column(db.Date)
+#     start_time = db.Column(db.Time)
+#     end_time = db.Column(db.Time)
+#     attendees = db.Column(db.Text)
+#     calendar_name = db.Column(db.String(255))
+
+#     def to_dict(self):
+#         return {
+#             "id": self.id,
+#             "title": self.title,
+#             "description": self.description,
+#             "date": self.date.isoformat() if self.date else None,
+#             "start_time": self.start_time.strftime("%H:%M") if self.start_time else None,
+#             "end_time": self.end_time.strftime("%H:%M") if self.end_time else None,
+#             "attendees": self.attendees,
+#             "calendar_name": self.calendar_name,
+#         }
+
+import os
+from flask import Flask, request, jsonify, send_from_directory, redirect
+from flask_sqlalchemy import SQLAlchemy
+from flask_cors import CORS
+from datetime import datetime, timedelta, date
+import google.auth.transport.requests
+from google.oauth2.credentials import Credentials
+from google_auth_oauthlib.flow import Flow
+from googleapiclient.discovery import build
+from sqlalchemy import cast, Date
+
+# ── Configure Flask & SQLite (use a relative path) ──
+app = Flask(__name__, static_folder="frontend", static_url_path='')
 CORS(app)
 
-app.config['SQLALCHEMY_DATABASE_URI'] = f'sqlite:///{DB_PATH}'
-app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+# Compute a path relative to this file’s directory:
+BASE_DIR = os.path.abspath(os.path.dirname(__file__))
+DB_PATH = os.path.join(BASE_DIR, "meetings.db")
+
+app.config["SQLALCHEMY_DATABASE_URI"] = f"sqlite:///{DB_PATH}"
+app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 db = SQLAlchemy(app)
 
-GOOGLE_CREDENTIALS_FILE = 'credentials.json'
-SCOPES = ['https://www.googleapis.com/auth/calendar.readonly']
-TOKEN_FILE = 'token.json'
+# ── Google OAuth setup ──
+os.environ["OAUTHLIB_INSECURE_TRANSPORT"] = "1"
+GOOGLE_CREDENTIALS_FILE = "credentials.json"
+TOKEN_FILE = "token.json"
+SCOPES = ["https://www.googleapis.com/auth/calendar.readonly"]
 
+# ── Meeting model ──
 class Meeting(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    title = db.Column(db.String(255))
+    title = db.Column(db.String(200))
     description = db.Column(db.Text)
     date = db.Column(db.Date)
     start_time = db.Column(db.Time)
     end_time = db.Column(db.Time)
     attendees = db.Column(db.Text)
-    calendar_name = db.Column(db.String(255))
+    calendar_name = db.Column(db.String(100))
 
     def to_dict(self):
         return {
@@ -57,7 +109,7 @@ class Meeting(db.Model):
             "attendees": self.attendees,
             "calendar_name": self.calendar_name,
         }
-    
+
 
 @app.route('/api/log-event', methods=['POST'])
 def log_event():
@@ -236,10 +288,11 @@ def serve_index():
 def serve_frontend(path="index.html"):
     return send_from_directory(app.static_folder, path)
 
-
+# ── Create tables on startup ──
 if __name__ == '__main__':
     with app.app_context():
         # db.drop_all() 
         db.create_all()  # ✅ no drop_all needed now
         print("\n ✅ Tables created \n")
     app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
+ 
